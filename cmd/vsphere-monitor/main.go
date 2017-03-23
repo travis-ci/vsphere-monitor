@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"time"
 
 	"github.com/pkg/errors"
@@ -68,10 +69,21 @@ func mainAction(c *cli.Context) error {
 
 	logger.Info("getting list of hosts")
 
-	hosts, err := vSphereClient.ListHostsInCluster(ctx, c.String("vsphere-cluster-path"))
-	if err != nil {
-		return errors.Wrap(err, "error listing hosts")
+	hostCount := 0
+	clusters := make(map[string][]*vspheremonitor.VSphereHost, len(c.StringSlice("vsphere-cluster-path")))
+	for _, clusterPath := range c.StringSlice("vsphere-cluster-path") {
+		clusterName := path.Base(clusterPath)
+
+		logger.WithField("cluster_name", clusterName).WithField("cluster_path", clusterPath).Info("getting list of hosts in cluster")
+		hosts, err := vSphereClient.ListHostsInCluster(ctx, clusterPath)
+		if err != nil {
+			return errors.Wrapf(err, "error listing hosts in cluster %s (path %s)", clusterName, clusterPath)
+		}
+
+		clusters[clusterName] = hosts
+		hostCount += len(hosts)
 	}
+	logger.WithField("host_count", hostCount).Info("found hosts")
 
 	libratoClient := vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"))
 
@@ -80,27 +92,31 @@ func mainAction(c *cli.Context) error {
 	for now := range ticker {
 		metrics := make(map[string]map[string]int64)
 
-		for _, host := range hosts {
-			alarmStates, err := vSphereClient.ListAlarmStatesForHost(ctx, host)
-			if err != nil {
-				logger.WithField("host", host.Name()).WithError(err).Error("error getting alarm states for host")
-				continue
-			}
+		for clusterName, hosts := range clusters {
+			for _, host := range hosts {
+				metricSource := clusterName + "-" + host.Name()
 
-			for alarmID, state := range alarmStates {
-				if _, ok := metrics[alarmID]; !ok {
-					metrics[alarmID] = make(map[string]int64)
+				alarmStates, err := vSphereClient.ListAlarmStatesForHost(ctx, host)
+				if err != nil {
+					logger.WithField("cluster_name", clusterName).WithField("host", host.Name()).WithError(err).Error("error getting alarm states for host")
+					continue
 				}
 
-				switch state {
-				case "green":
-					metrics[alarmID][host.Name()] = 0
-				case "yellow":
-					metrics[alarmID][host.Name()] = 1
-				case "red":
-					metrics[alarmID][host.Name()] = 2
-				case "gray":
-					// no data, so do nothing
+				for alarmID, state := range alarmStates {
+					if _, ok := metrics[alarmID]; !ok {
+						metrics[alarmID] = make(map[string]int64)
+					}
+
+					switch state {
+					case "green":
+						metrics[alarmID][metricSource] = 0
+					case "yellow":
+						metrics[alarmID][metricSource] = 1
+					case "red":
+						metrics[alarmID][metricSource] = 2
+					case "gray":
+						// no data, so do nothing
+					}
 				}
 			}
 		}
@@ -108,12 +124,14 @@ func mainAction(c *cli.Context) error {
 		var libratoMetrics vspheremonitor.LibratoMeasurements
 		libratoMetrics.MeasureTime = now.Unix()
 
+		measurementCount := 0
 		for name, sourceVals := range metrics {
 			if len(sourceVals) == 0 {
 				continue
 			}
 
 			for source, value := range sourceVals {
+				measurementCount++
 				libratoMetrics.Gauges = append(libratoMetrics.Gauges, vspheremonitor.LibratoGauge{
 					Name:   fmt.Sprintf("travis.vsphere-monitor.host-alarm.%s", name),
 					Value:  float64(value),
@@ -127,7 +145,7 @@ func mainAction(c *cli.Context) error {
 			logger.WithError(err).Error("couldn't submit metrics to Librato")
 		}
 
-		logger.Info("sent measurements to Librato")
+		logger.WithField("measurement_count", measurementCount).Info("sent measurements to Librato")
 	}
 
 	return nil
