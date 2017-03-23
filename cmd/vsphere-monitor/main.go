@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
@@ -54,7 +54,11 @@ func main() {
 }
 
 func mainAction(c *cli.Context) error {
-	log.Print("starting")
+	logrus.SetFormatter(&logrus.TextFormatter{DisableColors: true})
+	logger := logrus.WithField("pid", os.Getpid())
+
+	logger.WithField("version", VersionString).Info("starting vsphere-monitor")
+	defer logger.Info("stopping vsphere-monitor")
 
 	vsphereURL, err := url.Parse(c.String("vsphere-url"))
 	if err != nil {
@@ -68,7 +72,7 @@ func mainAction(c *cli.Context) error {
 		return errors.Wrap(err, "couldn't create govmomi client")
 	}
 
-	log.Print("getting hosts")
+	logger.Info("getting list of hosts")
 
 	finder := find.NewFinder(client.Client, true)
 
@@ -90,7 +94,7 @@ func mainAction(c *cli.Context) error {
 		for _, host := range hosts {
 			alarmStateResp, err := methods.GetAlarmState(ctx, client.Client, &types.GetAlarmState{This: *alarmManager, Entity: host.Reference()})
 			if err != nil {
-				fmt.Printf("couldn't get alarm states for host %s: %v\n", host.Name(), err)
+				logger.WithField("host", host.Name()).WithError(err).Error("couldn't get alarm states for host")
 				continue
 			}
 
@@ -130,13 +134,14 @@ func mainAction(c *cli.Context) error {
 
 		body, err := json.Marshal(libratoMetrics)
 		if err != nil {
-			log.Printf("couldn't marshal metrics: %v", err)
+			logger.WithError(err).Error("couldn't marshal metrics")
 			continue
 		}
 
 		req, err := http.NewRequest("POST", "https://metrics-api.librato.com/v1/metrics", bytes.NewReader(body))
 		if err != nil {
-			log.Printf("couldn't create request: %v", err)
+			logger.WithError(err).Error("couldn't create request")
+			continue
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -144,7 +149,7 @@ func mainAction(c *cli.Context) error {
 
 		_, err = http.DefaultClient.Do(req)
 		if err != nil {
-			log.Printf("error sending metrics: %v", err)
+			logger.WithError(err).Error("error sending metrics")
 		}
 	}
 
