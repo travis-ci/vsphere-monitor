@@ -14,10 +14,10 @@ var (
 			Usage:  "Whether to skip TLS certificate verification when connecting to the vSphere SDK",
 			EnvVar: "VSPHERE_MONITOR_VSPHERE_INSECURE,VSPHERE_INSECURE",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:   "vsphere-cluster-path",
-			Usage:  "Inventory path to the cluster to monitor",
-			EnvVar: "VSPHERE_MONITOR_VSPHERE_CLUSTER_PATH,VSPHERE_CLUSTER_PATH",
+			Usage:  "Inventory path to the cluster to monitor. Can be specified multiple times for multiple clusters, or use comma-separated values if using the environment variable.",
+			EnvVar: "VSPHERE_MONITOR_VSPHERE_CLUSTER_PATHS,VSPHERE_CLUSTER_PATHS",
 		},
 		cli.StringFlag{
 			Name:   "librato-email",
