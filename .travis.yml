@@ -3,6 +3,6 @@ go: 1.8
 sudo: false
 install:
   - go get -u github.com/FiloSottile/gvt
-  - gvt restore
+  - make deps
 script:
-  - go install .
+  - make

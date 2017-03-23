@@ -10,11 +10,11 @@ First, install [gvt](https://github.com/FiloSottile/gvt) if you don't have it al
 
 Download dependencies:
 
-    $ gvt restore
+    $ make deps
 
 Build:
 
-    $ go install .
+    $ make build
 
 ## License
 
