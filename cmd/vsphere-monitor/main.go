@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -87,10 +88,19 @@ func mainAction(c *cli.Context) error {
 
 	libratoClient := vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"))
 
+	alertIdMetricNameMap := make(map[string]string, len(c.StringSlice("vsphere-host-alert-id-metric-name")))
+	for _, alertIdMetricName := range c.StringSlice("vsphere-host-alert-id-metric-name") {
+		parts := strings.SplitN(alertIdMetricName, ":", 2)
+		alertIdMetricNameMap[parts[0]] = parts[1]
+	}
+
 	ticker := time.Tick(time.Minute)
 
 	for now := range ticker {
-		metrics := make(map[string]map[string]int64)
+		metrics := make(map[string]map[string]int64, len(alertIdMetricNameMap))
+		for _, metricName := range alertIdMetricNameMap {
+			metrics[metricName] = make(map[string]int64)
+		}
 
 		for clusterName, hosts := range clusters {
 			for _, host := range hosts {
@@ -103,17 +113,18 @@ func mainAction(c *cli.Context) error {
 				}
 
 				for alarmID, state := range alarmStates {
-					if _, ok := metrics[alarmID]; !ok {
-						metrics[alarmID] = make(map[string]int64)
+					metricName, ok := alertIdMetricNameMap[alarmID]
+					if !ok {
+						continue
 					}
 
 					switch state {
 					case "green":
-						metrics[alarmID][metricSource] = 0
+						metrics[metricName][metricSource] = 0
 					case "yellow":
-						metrics[alarmID][metricSource] = 1
+						metrics[metricName][metricSource] = 1
 					case "red":
-						metrics[alarmID][metricSource] = 2
+						metrics[metricName][metricSource] = 2
 					case "gray":
 						// no data, so do nothing
 					}

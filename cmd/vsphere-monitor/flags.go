@@ -19,6 +19,11 @@ var (
 			Usage:  "Inventory path to the cluster to monitor. Can be specified multiple times for multiple clusters, or use comma-separated values if using the environment variable.",
 			EnvVar: "VSPHERE_MONITOR_VSPHERE_CLUSTER_PATHS,VSPHERE_CLUSTER_PATHS",
 		},
+		cli.StringSliceFlag{
+			Name:   "vsphere-host-alert-id-metric-name",
+			Usage:  "alert-id:metric-name mappings. Can be specified multiple times for multiple alerts, or use comma-separated values if using the environment variable.",
+			EnvVar: "VSPHERE_MONITOR_VSPHERE_HOST_ALERT_ID_METRIC_NAMES,VSPHERE_HOST_ALERT_ID_METRIC_NAMES",
+		},
 		cli.StringFlag{
 			Name:   "librato-email",
 			Usage:  "Email address for the Librato account to send metrics to",
