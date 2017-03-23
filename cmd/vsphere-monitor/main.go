@@ -1,22 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	vspheremonitor "github.com/travis-ci/vsphere-monitor"
 	"github.com/urfave/cli"
-	"github.com/vmware/govmomi"
-	"github.com/vmware/govmomi/find"
-	"github.com/vmware/govmomi/vim25/methods"
-	"github.com/vmware/govmomi/vim25/types"
 )
 
 var (
@@ -67,24 +61,19 @@ func mainAction(c *cli.Context) error {
 
 	ctx := context.Background()
 
-	client, err := govmomi.NewClient(ctx, vsphereURL, c.Bool("vsphere-insecure"))
+	vSphereClient, err := vspheremonitor.NewVSphereClient(ctx, vsphereURL, c.Bool("vsphere-insecure"))
 	if err != nil {
-		return errors.Wrap(err, "couldn't create govmomi client")
+		return errors.Wrap(err, "error creating vsphere client")
 	}
 
 	logger.Info("getting list of hosts")
 
-	finder := find.NewFinder(client.Client, true)
-
-	hosts, err := finder.HostSystemList(ctx, c.String("vsphere-cluster-path"))
+	hosts, err := vSphereClient.ListHostsInCluster(ctx, c.String("vsphere-cluster-path"))
 	if err != nil {
-		return errors.Wrap(err, "couldn't list hosts")
+		return errors.Wrap(err, "error listing hosts")
 	}
 
-	alarmManager := client.Client.ServiceContent.AlarmManager
-	if alarmManager == nil {
-		return errors.New("no alarm manager")
-	}
+	libratoClient := vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"))
 
 	ticker := time.Tick(time.Minute)
 
@@ -92,30 +81,31 @@ func mainAction(c *cli.Context) error {
 		metrics := make(map[string]map[string]int64)
 
 		for _, host := range hosts {
-			alarmStateResp, err := methods.GetAlarmState(ctx, client.Client, &types.GetAlarmState{This: *alarmManager, Entity: host.Reference()})
+			alarmStates, err := vSphereClient.ListAlarmStatesForHost(ctx, host)
 			if err != nil {
-				logger.WithField("host", host.Name()).WithError(err).Error("couldn't get alarm states for host")
+				logger.WithField("host", host.Name()).WithError(err).Error("error getting alarm states for host")
 				continue
 			}
 
-			for _, state := range alarmStateResp.Returnval {
-				if _, ok := metrics[state.Alarm.Value]; !ok {
-					metrics[state.Alarm.Value] = make(map[string]int64)
+			for alarmID, state := range alarmStates {
+				if _, ok := metrics[alarmID]; !ok {
+					metrics[alarmID] = make(map[string]int64)
 				}
 
-				switch state.OverallStatus {
-				case types.ManagedEntityStatusGreen:
-					metrics[state.Alarm.Value][host.Name()] = 0
-				case types.ManagedEntityStatusYellow:
-					metrics[state.Alarm.Value][host.Name()] = 1
-				case types.ManagedEntityStatusRed:
-					metrics[state.Alarm.Value][host.Name()] = 2
-				case types.ManagedEntityStatusGray:
+				switch state {
+				case "green":
+					metrics[alarmID][host.Name()] = 0
+				case "yellow":
+					metrics[alarmID][host.Name()] = 1
+				case "red":
+					metrics[alarmID][host.Name()] = 2
+				case "gray":
+					// no data, so do nothing
 				}
 			}
 		}
 
-		var libratoMetrics libratoMeasurements
+		var libratoMetrics vspheremonitor.LibratoMeasurements
 		libratoMetrics.MeasureTime = now.Unix()
 
 		for name, sourceVals := range metrics {
@@ -124,7 +114,7 @@ func mainAction(c *cli.Context) error {
 			}
 
 			for source, value := range sourceVals {
-				libratoMetrics.Gauges = append(libratoMetrics.Gauges, libratoGauge{
+				libratoMetrics.Gauges = append(libratoMetrics.Gauges, vspheremonitor.LibratoGauge{
 					Name:   fmt.Sprintf("travis.vsphere-monitor.host-alarm.%s", name),
 					Value:  float64(value),
 					Source: source,
@@ -132,37 +122,13 @@ func mainAction(c *cli.Context) error {
 			}
 		}
 
-		body, err := json.Marshal(libratoMetrics)
+		err := libratoClient.SubmitMeasurements(libratoMetrics)
 		if err != nil {
-			logger.WithError(err).Error("couldn't marshal metrics")
-			continue
+			logger.WithError(err).Error("couldn't submit metrics to Librato")
 		}
 
-		req, err := http.NewRequest("POST", "https://metrics-api.librato.com/v1/metrics", bytes.NewReader(body))
-		if err != nil {
-			logger.WithError(err).Error("couldn't create request")
-			continue
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.SetBasicAuth(c.String("librato-email"), c.String("librato-token"))
-
-		_, err = http.DefaultClient.Do(req)
-		if err != nil {
-			logger.WithError(err).Error("error sending metrics")
-		}
+		logger.Info("sent measurements to Librato")
 	}
 
 	return nil
-}
-
-type libratoMeasurements struct {
-	MeasureTime int64          `json:"measure_time"`
-	Gauges      []libratoGauge `json:"gauges"`
-}
-
-type libratoGauge struct {
-	Name   string  `json:"name"`
-	Value  float64 `json:"value"`
-	Source string  `json:"source"`
 }
