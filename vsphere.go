@@ -12,10 +12,16 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 )
 
+// A VSphereClient allows for communicating with the vSphere SDK API.
 type VSphereClient struct {
 	client *govmomi.Client
 }
 
+// NewVSphereClient creates a new vSphere Client, connects to the API and
+// authenticates with it to set up a session. The URL should be the URL to the
+// SDK endpoint, and should include the username and password, for example
+// "https://admin:password@192.0.2.1/sdk". The insecure argument determines
+// whether the TLS certificate of the SDK endpoint should be verified or not.
 func NewVSphereClient(ctx context.Context, url *url.URL, insecure bool) (*VSphereClient, error) {
 	client, err := govmomi.NewClient(ctx, url, insecure)
 	if err != nil {
@@ -25,6 +31,7 @@ func NewVSphereClient(ctx context.Context, url *url.URL, insecure bool) (*VSpher
 	return &VSphereClient{client: client}, nil
 }
 
+// ListHostsInCluster returns a list of hosts in the cluster at the given inventory path. Note that the cluster path should be a full inventory path, for example "/datacenter-name/host/cluster-name". If an error occurs, a nil slice is returned with the error.
 func (vc *VSphereClient) ListHostsInCluster(ctx context.Context, clusterPath string) ([]*VSphereHost, error) {
 	finder := find.NewFinder(vc.client.Client, true)
 	govmomiHosts, err := finder.HostSystemList(ctx, clusterPath)
@@ -40,6 +47,7 @@ func (vc *VSphereClient) ListHostsInCluster(ctx context.Context, clusterPath str
 	return hosts, nil
 }
 
+// ListAlarmStatesForHost returns a map with the alarm IDs of the alarms defined on the given host as keys, and their current status as the value. Valid statuses are "green", "yellow", "red" and "gray". If an error occurs, it is returned and the map is nil.
 func (vc *VSphereClient) ListAlarmStatesForHost(ctx context.Context, host *VSphereHost) (map[string]string, error) {
 	alarmManager := vc.client.Client.ServiceContent.AlarmManager
 	if alarmManager == nil {
@@ -62,10 +70,12 @@ func (vc *VSphereClient) ListAlarmStatesForHost(ctx context.Context, host *VSphe
 	return alarmStates, nil
 }
 
+// A VSphereHost represents a single ESXi host
 type VSphereHost struct {
 	hostSystem *object.HostSystem
 }
 
+// Name returns the inventory name of the VSphereHost
 func (vh *VSphereHost) Name() string {
 	return vh.hostSystem.Name()
 }
