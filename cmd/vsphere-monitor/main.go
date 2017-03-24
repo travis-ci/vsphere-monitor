@@ -39,7 +39,7 @@ func main() {
 	app.Author = "Travis CI GmbH"
 	app.Email = "contact+vsphere-monitor@travis-ci.org"
 
-	app.Flags = Flags
+	app.Flags = flags
 	app.Action = mainAction
 
 	err := app.Run(os.Args)
@@ -88,17 +88,17 @@ func mainAction(c *cli.Context) error {
 
 	libratoClient := vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"))
 
-	alertIdMetricNameMap := make(map[string]string, len(c.StringSlice("vsphere-host-alert-id-metric-name")))
-	for _, alertIdMetricName := range c.StringSlice("vsphere-host-alert-id-metric-name") {
-		parts := strings.SplitN(alertIdMetricName, ":", 2)
-		alertIdMetricNameMap[parts[0]] = parts[1]
+	alertIDMetricNameMap := make(map[string]string, len(c.StringSlice("vsphere-host-alert-id-metric-name")))
+	for _, alertIDMetricName := range c.StringSlice("vsphere-host-alert-id-metric-name") {
+		parts := strings.SplitN(alertIDMetricName, ":", 2)
+		alertIDMetricNameMap[parts[0]] = parts[1]
 	}
 
 	ticker := time.Tick(time.Minute)
 
 	for now := range ticker {
-		metrics := make(map[string]map[string]int64, len(alertIdMetricNameMap))
-		for _, metricName := range alertIdMetricNameMap {
+		metrics := make(map[string]map[string]int64, len(alertIDMetricNameMap))
+		for _, metricName := range alertIDMetricNameMap {
 			metrics[metricName] = make(map[string]int64)
 		}
 
@@ -113,7 +113,7 @@ func mainAction(c *cli.Context) error {
 				}
 
 				for alarmID, state := range alarmStates {
-					metricName, ok := alertIdMetricNameMap[alarmID]
+					metricName, ok := alertIDMetricNameMap[alarmID]
 					if !ok {
 						continue
 					}

@@ -3,7 +3,7 @@ package main
 import "github.com/urfave/cli"
 
 var (
-	Flags = []cli.Flag{
+	flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "vsphere-url",
 			Usage:  "vSphere SDK URL, e.g. https://admin:password@192.0.2.1/sdk",
