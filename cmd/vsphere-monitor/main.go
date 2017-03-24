@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -68,96 +67,30 @@ func mainAction(c *cli.Context) error {
 		return errors.Wrap(err, "error creating vsphere client")
 	}
 
-	logger.Info("getting list of hosts")
-
-	hostCount := 0
-	clusters := make(map[string][]*vspheremonitor.VSphereHost, len(c.StringSlice("vsphere-cluster-path")))
-	for _, clusterPath := range c.StringSlice("vsphere-cluster-path") {
-		clusterName := path.Base(clusterPath)
-
-		logger.WithField("cluster_name", clusterName).WithField("cluster_path", clusterPath).Info("getting list of hosts in cluster")
-		hosts, err := vSphereClient.ListHostsInCluster(ctx, clusterPath)
-		if err != nil {
-			return errors.Wrapf(err, "error listing hosts in cluster %s (path %s)", clusterName, clusterPath)
-		}
-
-		clusters[clusterName] = hosts
-		hostCount += len(hosts)
+	har := vspheremonitor.HostAlarmReporter{
+		LibratoClient:        vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token")),
+		VSphereClient:        vSphereClient,
+		AlarmIDMetricNameMap: kvSliceToMap(c.StringSlice("vsphere-host-alert-id-metric-name"), ":"),
 	}
-	logger.WithField("host_count", hostCount).Info("found hosts")
 
-	libratoClient := vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"))
-
-	alertIDMetricNameMap := make(map[string]string, len(c.StringSlice("vsphere-host-alert-id-metric-name")))
-	for _, alertIDMetricName := range c.StringSlice("vsphere-host-alert-id-metric-name") {
-		parts := strings.SplitN(alertIDMetricName, ":", 2)
-		alertIDMetricNameMap[parts[0]] = parts[1]
+	err = har.SetClusterPaths(ctx, logger, c.StringSlice("vsphere-cluster-path"))
+	if err != nil {
+		return errors.Wrap(err, "error setting up clusters")
 	}
 
 	ticker := time.Tick(time.Minute)
-
-	for now := range ticker {
-		metrics := make(map[string]map[string]int64, len(alertIDMetricNameMap))
-		for _, metricName := range alertIDMetricNameMap {
-			metrics[metricName] = make(map[string]int64)
-		}
-
-		for clusterName, hosts := range clusters {
-			for _, host := range hosts {
-				metricSource := clusterName + "-" + host.Name()
-
-				alarmStates, err := vSphereClient.ListAlarmStatesForHost(ctx, host)
-				if err != nil {
-					logger.WithField("cluster_name", clusterName).WithField("host", host.Name()).WithError(err).Error("error getting alarm states for host")
-					continue
-				}
-
-				for alarmID, state := range alarmStates {
-					metricName, ok := alertIDMetricNameMap[alarmID]
-					if !ok {
-						continue
-					}
-
-					switch state {
-					case "green":
-						metrics[metricName][metricSource] = 0
-					case "yellow":
-						metrics[metricName][metricSource] = 1
-					case "red":
-						metrics[metricName][metricSource] = 2
-					case "gray":
-						// no data, so do nothing
-					}
-				}
-			}
-		}
-
-		var libratoMetrics vspheremonitor.LibratoMeasurements
-		libratoMetrics.MeasureTime = now.Unix()
-
-		measurementCount := 0
-		for name, sourceVals := range metrics {
-			if len(sourceVals) == 0 {
-				continue
-			}
-
-			for source, value := range sourceVals {
-				measurementCount++
-				libratoMetrics.Gauges = append(libratoMetrics.Gauges, vspheremonitor.LibratoGauge{
-					Name:   fmt.Sprintf("travis.vsphere-monitor.host-alarm.%s", name),
-					Value:  float64(value),
-					Source: source,
-				})
-			}
-		}
-
-		err := libratoClient.SubmitMeasurements(libratoMetrics)
-		if err != nil {
-			logger.WithError(err).Error("couldn't submit metrics to Librato")
-		}
-
-		logger.WithField("measurement_count", measurementCount).Info("sent measurements to Librato")
+	for range ticker {
+		har.Report(ctx, logger)
 	}
 
 	return nil
+}
+
+func kvSliceToMap(kvs []string, separator string) map[string]string {
+	kvMap := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		parts := strings.SplitN(kv, separator, 2)
+		kvMap[parts[0]] = parts[1]
+	}
+	return kvMap
 }
