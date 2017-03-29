@@ -68,7 +68,7 @@ func mainAction(c *cli.Context) error {
 	}
 
 	har := vspheremonitor.HostAlarmReporter{
-		LibratoClient:        vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token")),
+		LibratoClient:        vspheremonitor.NewLibratoClient(c.String("librato-email"), c.String("librato-token"), c.String("librato-source-prefix")),
 		VSphereClient:        vSphereClient,
 		AlarmIDMetricNameMap: kvSliceToMap(c.StringSlice("vsphere-host-alert-id-metric-name"), ":"),
 	}
