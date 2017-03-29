@@ -69,10 +69,6 @@ func (har *HostAlarmReporter) Report(ctx context.Context, logger logrus.FieldLog
 
 func (har *HostAlarmReporter) getMetrics(ctx context.Context, logger logrus.FieldLogger) map[string]map[string]int64 {
 	metrics := make(map[string]map[string]int64, len(har.AlarmIDMetricNameMap))
-	for _, metricName := range har.AlarmIDMetricNameMap {
-		metrics[metricName] = make(map[string]int64)
-	}
-
 	for clusterName, hosts := range har.Clusters {
 		for _, host := range hosts {
 			metricSource := clusterName + "-" + host.Name()
@@ -87,6 +83,9 @@ func (har *HostAlarmReporter) getMetrics(ctx context.Context, logger logrus.Fiel
 			for alarmID, state := range alarmStates {
 				metricValue, ok := alarmStateToMetricValueMap[state]
 				if ok {
+					if _, ok := metrics[alarmID]; !ok {
+						metrics[alarmID] = make(map[string]int64)
+					}
 					metrics[alarmID][metricSource] = metricValue
 				}
 			}
