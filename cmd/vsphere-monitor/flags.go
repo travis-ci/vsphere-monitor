@@ -39,5 +39,15 @@ var (
 			Usage:  "Prefix to prepent to all Librato source names",
 			EnvVar: "VSPHERE_MONITOR_LIBRATO_SOURCE_PREFIX,LIBRATO_SOURCE_PREFIX",
 		},
+		cli.StringFlag{
+			Name:   "sentry-dsn",
+			Usage:  "Sentry DSN for sending errors to Sentry",
+			EnvVar: "VSPHERE_MONITOR_SENTRY_DSN,SENTRY_DSN",
+		},
+		cli.StringFlag{
+			Name:   "sentry-environment",
+			Usage:  "Environment name to pass to Sentry when sending errors",
+			EnvVar: "VSPHERE_MONITOR_SENTRY_ENVIRONMENT,SENTRY_ENVIRONMENT",
+		},
 	}
 )
