@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	vspheremonitor "github.com/travis-ci/vsphere-monitor"
@@ -41,8 +42,12 @@ func main() {
 	app.Flags = flags
 	app.Action = mainAction
 
-	err := app.Run(os.Args)
+	var err error
+	raven.CapturePanicAndWait(func() {
+		err = app.Run(os.Args)
+	}, nil)
 	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
 		fmt.Printf("%s: %v\n", os.Args[0], err)
 		os.Exit(1)
 	}
@@ -54,6 +59,20 @@ func mainAction(c *cli.Context) error {
 
 	logger.WithField("version", VersionString).Info("starting vsphere-monitor")
 	defer logger.Info("stopping vsphere-monitor")
+
+	if c.String("sentry-dsn") != "" {
+		err := raven.SetDSN(c.String("sentry-dsn"))
+		if err == nil {
+			raven.SetRelease(VersionString)
+			if c.String("sentry-environment") != "" {
+				raven.SetEnvironment(c.String("sentry-environment"))
+			}
+
+			logger.Info("set up Sentry")
+		} else {
+			logger.WithError(err).Error("couldn't set Sentry DSN")
+		}
+	}
 
 	vsphereURL, err := url.Parse(c.String("vsphere-url"))
 	if err != nil {

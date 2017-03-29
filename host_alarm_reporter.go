@@ -6,6 +6,7 @@ import (
 	"path"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -78,6 +79,7 @@ func (har *HostAlarmReporter) getMetrics(ctx context.Context, logger logrus.Fiel
 
 			alarmStates, err := har.VSphereClient.ListAlarmStatesForHost(ctx, host)
 			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
 				logger.WithField("cluster_name", clusterName).WithField("host", host.Name()).WithError(err).Error("error getting alarm states for host")
 				continue
 			}
