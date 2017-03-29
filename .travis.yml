@@ -5,4 +5,15 @@ install:
   - go get -u github.com/FiloSottile/gvt
   - make deps
 script:
-  - make
+  - make build
+  - make crossbuild
+
+addons:
+  artifacts:
+    paths:
+    - ./build/linux/amd64/vsphere-monitor
+    - ./build/darwin/amd64/vsphere-monitor
+    target_paths:
+    - travis-ci/vsphere-monitor/$TRAVIS_BUILD_NUMBER/$TRAVIS_JOB_NUMBER
+    - travis-ci/vsphere-monitor/$(git describe --always --dirty --tags)
+    - travis-ci/vsphere-monitor/$TRAVIS_BRANCH

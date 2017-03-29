@@ -32,6 +32,15 @@ clean:
 build: deps
 	go install -ldflags "$(GOBUILD_LDFLAGS)" $(MAIN_PACKAGE)
 
+.PHONY: crossbuild
+crossbuild: deps
+	GOARCH=amd64 GOOS=darwin CGO_ENABLED=0 \
+		   go build -o build/darwin/amd64/vsphere-monitor \
+		   -ldflags "$(GOBUILD_LDFLAGS)" $(MAIN_PACKAGE)
+	GOARCH=amd64 GOOS=linux CGO_ENABLED=0 \
+		   go build -o build/linux/amd64/vsphere-monitor \
+		   -ldflags "$(GOBUILD_LDFLAGS)" $(MAIN_PACKAGE)
+
 .PHONY: deps
 deps: vendor/.deps-fetched
 
