@@ -34,5 +34,10 @@ var (
 			Usage:  "Librato token (with record permissions) associated with the Librato account to send metrics to",
 			EnvVar: "VSPHERE_MONITOR_LIBRATO_TOKEN,LIBRATO_TOKEN",
 		},
+		cli.StringFlag{
+			Name:   "librato-source-prefix",
+			Usage:  "Prefix to prepent to all Librato source names",
+			EnvVar: "VSPHERE_MONITOR_LIBRATO_SOURCE_PREFIX,LIBRATO_SOURCE_PREFIX",
+		},
 	}
 )

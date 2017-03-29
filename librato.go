@@ -12,24 +12,29 @@ import (
 // Librato API. It only supports accounts using the "legacy" source-based
 // metrics, tag-based metrics are not supported.
 type LibratoClient struct {
-	client       *http.Client
-	email, token string
+	client                     *http.Client
+	email, token, sourcePrefix string
 }
 
 // NewLibratoClient creates a new LibratoClient using the given email and
 // token. The token needs to be associated with the Librato account with the
 // given email and needs to have record permissions.
-func NewLibratoClient(email, token string) *LibratoClient {
+func NewLibratoClient(email, token, sourcePrefix string) *LibratoClient {
 	return &LibratoClient{
-		client: new(http.Client),
-		email:  email,
-		token:  token,
+		client:       new(http.Client),
+		email:        email,
+		token:        token,
+		sourcePrefix: sourcePrefix,
 	}
 }
 
 // SubmitMeasurements submits a list of measurements to Librato. All fields in
 // the given structure are required.
 func (lc *LibratoClient) SubmitMeasurements(measurements LibratoMeasurements) error {
+	for i := range measurements.Gauges {
+		measurements.Gauges[i].Source = lc.sourcePrefix + measurements.Gauges[i].Source
+	}
+
 	body, err := json.Marshal(measurements)
 	if err != nil {
 		return errors.Wrap(err, "error marshalling measurements to JSON")
