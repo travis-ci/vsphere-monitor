@@ -1,12 +1,12 @@
 language: go
-go: 1.8
-sudo: false
+go: 1.11.x
 install:
   - go get -u github.com/FiloSottile/gvt
   - make deps
 script:
   - make build
   - make crossbuild
+  - make docker-build
 
 addons:
   artifacts:
