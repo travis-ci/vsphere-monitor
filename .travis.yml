@@ -1,5 +1,6 @@
 language: go
 go: 1.11.x
+
 install:
   - go get -u github.com/FiloSottile/gvt
   - make deps
@@ -7,6 +8,16 @@ script:
   - make build
   - make crossbuild
   - make docker-build
+
+deploy:
+  provider: script
+  script: bin/docker-push
+  # we don't need this for docker, but the artifacts push does
+  skip_cleanup: true
+  on:
+    # push all non-PR builds to Docker Hub
+    all_branches: true
+    condition: "$TRAVIS_PULL_REQUEST == false"
 
 addons:
   artifacts:
